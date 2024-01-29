@@ -8,7 +8,6 @@ ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY . .
 RUN dotnet restore "TeacupProjects.csproj"
-WORKDIR "/src/TeacupProjects"
 RUN dotnet build "TeacupProjects.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
