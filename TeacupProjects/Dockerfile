@@ -6,9 +6,8 @@ EXPOSE 443
 FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["TeacupProjects/TeacupProjects.csproj", "TeacupProjects/"]
-RUN dotnet restore "TeacupProjects/TeacupProjects.csproj"
 COPY . .
+RUN dotnet restore "TeacupProjects.csproj"
 WORKDIR "/src/TeacupProjects"
 RUN dotnet build "TeacupProjects.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
