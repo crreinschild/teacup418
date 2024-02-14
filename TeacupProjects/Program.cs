@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using TeacupProjects.Data;
+using TeacupProjects.Pages;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,7 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.MapBlazorHub();
+app.MapHub<Battleship.BattleshipHub>("/battleshiphub");
 app.MapFallbackToPage("/_Host");
 
 app.Run();

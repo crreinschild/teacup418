@@ -1,0 +1,324 @@
+﻿@page "/battleship"
+@page "/battleship/{id}"
+@using Microsoft.AspNetCore.SignalR
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager NavigationManager
+<h3>Battleship</h3>
+@if (string.IsNullOrEmpty(id))
+{
+    <button @onclick="StartGame">Start Game</button>
+}
+else
+{
+    <p>Id: @id</p>
+    <p>Url: @NavigationManager.Uri</p>
+    
+    <button @onclick="Send" disabled="@(!IsConnected)">Send</button>
+    <p>Connected: @IsConnected</p>
+    <ul>
+        @foreach (var message in messages)
+        {
+            <li>@message</li>
+        }
+    </ul>
+    
+    <table>
+        @for (int i = 0; i < 10; i++)
+        {
+            int y = i;
+            <tr>
+                @for (int j = 0; j < 10; j++)
+                {
+                    int x = j;
+                    <td class="@myBoard?.cells[x,y]?.Classes"
+                        @onmousedown="e => OnMouseDownMyBoard(e, (x,y))"
+                        @onmouseover='e => OnMouseOverMyBoard(e, (x,y))'
+                        @onmouseout='e => OnMouseOffMyBoard(e, (x,y))'
+                        @oncontextmenu='_ => { }'
+                        @oncontextmenu:preventDefault="true">?</td>
+                }
+            </tr>
+        }
+    </table>
+    
+    <p role="status">@status</p>
+}
+
+
+@code {
+    [Parameter]
+    public string id { get; set; }
+    private HubConnection? hubConnection;
+    private List<string> messages = new List<string>();
+    private Board myBoard = new Board();
+    private List<Board.Ship> shipsToPlace = new List<Board.Ship>()
+    {
+        new Board.Ship.Carrier(),
+        new Board.Ship.Battleship(),
+        new Board.Ship.Cruiser(),
+        new Board.Ship.Submarine(),
+        new Board.Ship.Destroyer()
+    };
+    private string status = string.Empty;
+    
+    void StartGame()
+    {
+        NavigationManager.NavigateTo($"/battleship/{Guid.NewGuid()}", true);
+    }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(id))
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/battleshiphub"))
+                .Build();
+
+            hubConnection.On<string>("Receive", (message) =>
+            {
+                var encodedMsg = $"{message}";
+                messages.Add(encodedMsg);
+                InvokeAsync(StateHasChanged);
+            });
+            
+            await hubConnection.StartAsync();
+        }
+    }
+    
+    private async Task Send()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("Send", Guid.NewGuid());
+        }
+    }
+
+    public bool IsConnected =>
+        hubConnection?.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+    
+    public class BattleshipHub : Hub
+    {
+        public async Task Send(string message)
+        {
+            await Clients.All.SendAsync("Receive", message);
+        }
+    }
+
+    public class Board
+    {
+        public Cell[,] cells;
+        
+
+        public Board()
+        {
+            cells = new Cell[10,10];
+            
+            int? previousRow = null;
+            for (var i = 9; i >= 0; i--)
+            {
+                int? previousColumn = null;
+                for (var j = 9; j >= 0; j--)
+                {
+                    cells[i, j] = new Cell()
+                    {
+                        coords = (j, i),
+                        e = previousColumn.HasValue ? cells[i, previousColumn.Value] : null,
+                        s = previousRow.HasValue ? cells[previousRow.Value, j] : null
+                    };
+                    previousColumn = j;
+                }
+                previousRow = i;
+            }
+        }
+
+        public abstract class Ship
+        {
+            private int _length;
+            private Direction orientation = Direction.Vertical;
+            private Cell[]? _cells;
+            
+            public Direction Orientation => orientation;
+
+            public bool CanPlace(Cell cell)
+            {
+                var cellsBeingConsidered = cell.LinkedCells(orientation).Take(_length).ToList();
+                
+                var valid = cellsBeingConsidered.Count == _length 
+                             && cellsBeingConsidered.All(c => c.ship == null);
+                
+                cellsBeingConsidered.ForEach(c => c.SetPlacementIndicator(valid));
+                return valid;
+            }
+            
+            public bool TryPlace(Cell cell)
+            {
+                if (!CanPlace(cell)) return false;
+                
+                _cells = cell.LinkedCells(orientation).Take(_length).ToArray();
+                
+                foreach (var c in _cells)
+                {
+                    c.SetShip(this);
+                }
+                
+                return true;
+            }
+            
+            public void ToggleOrientation() => orientation = orientation == Direction.Vertical ? Direction.Horizontal : Direction.Vertical;
+            
+            public enum Direction
+            {
+                Vertical,
+                Horizontal
+            }
+            
+            public class Carrier : Ship
+            {
+                public Carrier() => _length = 5;
+            }
+            
+            public class Battleship : Ship
+            {
+                public Battleship() => _length = 4;
+            }
+            
+            public class Cruiser : Ship
+            {
+                public Cruiser() => _length = 3;
+            }
+
+            public class Submarine : Ship
+            {
+                public Submarine() => _length = 3;
+            }
+            
+            public class Destroyer : Ship
+            {
+                public Destroyer() => _length = 2;
+            }
+        }
+        
+        public class Cell
+        {
+            public (int x, int y) coords;
+            private bool considered;
+            private bool valid;
+            public Ship? ship;
+            public Cell? e, s;
+
+            public string Classes
+            {
+                get
+                {
+                    if (considered)
+                    {
+                        if (valid)
+                            return "cell-valid";
+                        return "cell-invalid";
+                    } 
+                    if (ship != null)
+                    {
+                        return "cell-ship";
+                    }
+
+                    return "";
+                }
+            }
+
+            public void SetPlacementIndicator(bool isValid)
+            {
+                considered = true;
+                valid = isValid;
+            }
+            
+            public void ClearPlacementIndicator()
+            {
+                considered = false;
+                EastCells.ToList().ForEach(c => c.considered = false);
+                SouthCells.ToList().ForEach(c => c.considered = false);
+            }
+            
+            public void SetShip(Ship ship) => this.ship = ship;
+            
+            public IEnumerable<Cell> LinkedCells(Ship.Direction direction) => direction switch 
+            {
+                Ship.Direction.Horizontal => EastCells,
+                Ship.Direction.Vertical => SouthCells,
+                _ => throw new ArgumentOutOfRangeException()    
+            };
+
+            private IEnumerable<Cell> EastCells
+            {
+                get
+                {
+                    var next = this;
+                    while (next != null)
+                    {
+                        yield return next;
+                        next = next.e;
+                    }
+                }
+            }
+            
+            private IEnumerable<Cell> SouthCells
+            {
+                get
+                {
+                    var next = this;
+                    while (next != null)
+                    {
+                        yield return next;
+                        next = next.s;
+                    }
+                }
+            }
+        }
+    }
+
+    private void OnMouseOverMyBoard(MouseEventArgs obj, (int x, int y) coords)
+    {
+        if (shipsToPlace.Any())
+        {
+            var cell = myBoard.cells[coords.x, coords.y];
+            shipsToPlace.First().CanPlace(cell);
+            status = $"({coords.x}, {coords.y})";
+        }
+    }
+    
+    private void OnMouseOffMyBoard(MouseEventArgs obj, (int x, int y) coords)
+    {
+        if (shipsToPlace.Any())
+        {
+            var cell = myBoard.cells[coords.x, coords.y];
+            cell.ClearPlacementIndicator();
+        }
+    }
+    
+    private void OnMouseDownMyBoard(MouseEventArgs obj, (int x, int y) coords)
+    {
+        if (shipsToPlace.Any())
+        {
+            var ship = shipsToPlace.First();
+            if (obj.Button == 0)
+            {
+                var cell = myBoard.cells[coords.x, coords.y];
+                if (ship.TryPlace(cell))
+                {
+                    shipsToPlace.RemoveAt(0);
+                }
+            } 
+            else if (obj.Button == 2)
+            {
+                ship.ToggleOrientation();
+            }
+        }
+    }
+}

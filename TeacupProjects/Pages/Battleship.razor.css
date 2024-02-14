@@ -1,0 +1,29 @@
+table, td {
+    border: 1px solid black;
+    border-collapse: collapse;
+    
+    td {
+        width: 20px;
+        height: 20px;
+        text-align: center;
+        vertical-align: middle;
+        font-size: 14px;
+        cursor: pointer;
+
+
+    }
+
+}
+
+.cell-valid {
+    background-color: #00ff00;
+}
+
+.cell-invalid {
+    background-color: #ff0000;
+}
+
+.cell-ship {
+    background-color: #0000ff;
+}
+
