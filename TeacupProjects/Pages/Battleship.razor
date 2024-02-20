@@ -1,8 +1,9 @@
 ﻿@page "/battleship"
 @page "/battleship/{id}"
-@using Microsoft.AspNetCore.SignalR
-@using Microsoft.AspNetCore.SignalR.Client
+@using TeacupProjects.Battleship
+@using TeacupProjects.Battleship.Signal
 @inject NavigationManager NavigationManager
+@inject IBattleshipClient BattleshipClient
 <h3>Battleship</h3>
 @if (string.IsNullOrEmpty(id))
 {
@@ -13,8 +14,8 @@ else
     <p>Id: @id</p>
     <p>Url: @NavigationManager.Uri</p>
     
-    <button @onclick="Send" disabled="@(!IsConnected)">Send</button>
-    <p>Connected: @IsConnected</p>
+    <button @onclick="Send" disabled="@(!BattleshipClient.IsConnected)">Send</button>
+    <p>Connected: @BattleshipClient.IsConnected</p>
     <ul>
         @foreach (var message in messages)
         {
@@ -47,17 +48,18 @@ else
 
 @code {
     [Parameter]
-    public string id { get; set; }
-    private HubConnection? hubConnection;
+    public string? id { get; set; }
+    private string? connectionId = null;
+    private string? opponentConnectionId = null;
     private List<string> messages = new List<string>();
     private Board myBoard = new Board();
-    private List<Board.Ship> shipsToPlace = new List<Board.Ship>()
+    private List<Ship> shipsToPlace = new List<Ship>()
     {
-        new Board.Ship.Carrier(),
-        new Board.Ship.Battleship(),
-        new Board.Ship.Cruiser(),
-        new Board.Ship.Submarine(),
-        new Board.Ship.Destroyer()
+        new Ship.Carrier(),
+        new Ship.Battleship(),
+        new Ship.Cruiser(),
+        new Ship.Submarine(),
+        new Ship.Destroyer()
     };
     private string status = string.Empty;
     
@@ -70,218 +72,74 @@ else
     {
         if (!string.IsNullOrEmpty(id))
         {
-            hubConnection = new HubConnectionBuilder()
-                .WithUrl(NavigationManager.ToAbsoluteUri("/battleshiphub"))
-                .Build();
-
-            hubConnection.On<string>("Receive", (message) =>
-            {
-                var encodedMsg = $"{message}";
-                messages.Add(encodedMsg);
-                InvokeAsync(StateHasChanged);
-            });
+            BattleshipClient.OnJoin(OnJoin);
+            BattleshipClient.OnAcceptJoin(OnAcceptJoin);
+            BattleshipClient.OnRejectJoin(OnRejectJoin);
+            BattleshipClient.OnSend(OnSend);
             
-            await hubConnection.StartAsync();
+            // get my connection id
+            await BattleshipClient.Start();
+            connectionId = BattleshipClient.ConnectionId;
+            await BattleshipClient.Join(id, connectionId);
         }
     }
     
-    private async Task Send()
+    private async Task Send() => await BattleshipClient.Send(Guid.NewGuid().ToString());
+
+    private async Task OnSend(string message)
     {
-        if (hubConnection is not null)
-        {
-            await hubConnection.SendAsync("Send", Guid.NewGuid());
-        }
+        messages.Add(message);
+        await InvokeAsync(StateHasChanged);
     }
 
-    public bool IsConnected =>
-        hubConnection?.State == HubConnectionState.Connected;
-
-    public async ValueTask DisposeAsync()
+    private async Task OnJoin(string pageId, string incomingConnectionId)
     {
-        if (hubConnection is not null)
+        if (pageId != id)
         {
-            await hubConnection.DisposeAsync();
+            messages.Add($"Ignoring {incomingConnectionId} for {pageId}");
+        } else if (incomingConnectionId == connectionId)
+        {
+            messages.Add($"It's me! {connectionId}");
+        } else if (opponentConnectionId is null)
+        {
+            messages.Add($"Letting {incomingConnectionId} join.");
+            opponentConnectionId = incomingConnectionId;
+            await BattleshipClient.AcceptJoin(connectionId);
         }
+        else
+        {
+            messages.Add($"Rejecting {incomingConnectionId}");
+            await BattleshipClient.RejectJoin("Game already in progress");
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnAcceptJoin(string incomingConnectionId)
+    {
+        if (incomingConnectionId == connectionId)
+        {
+            messages.Add($"I'm accepting me! {connectionId}");
+        } else if (opponentConnectionId is null)
+        {
+            opponentConnectionId = incomingConnectionId;
+            messages.Add($"Joined game against: {incomingConnectionId}");
+        }
+        else
+        {
+            messages.Add($"Client ({incomingConnectionId}) accepted me, but I already have an opponent ({opponentConnectionId})");
+        }
+        await InvokeAsync(StateHasChanged);
     }
     
-    public class BattleshipHub : Hub
+    private async Task OnRejectJoin(string message)
     {
-        public async Task Send(string message)
-        {
-            await Clients.All.SendAsync("Receive", message);
-        }
+        messages.Add(message);
+        await InvokeAsync(StateHasChanged);
     }
 
-    public class Board
-    {
-        public Cell[,] cells;
-        
-
-        public Board()
-        {
-            cells = new Cell[10,10];
-            
-            int? previousRow = null;
-            for (var i = 9; i >= 0; i--)
-            {
-                int? previousColumn = null;
-                for (var j = 9; j >= 0; j--)
-                {
-                    cells[i, j] = new Cell()
-                    {
-                        coords = (j, i),
-                        e = previousColumn.HasValue ? cells[i, previousColumn.Value] : null,
-                        s = previousRow.HasValue ? cells[previousRow.Value, j] : null
-                    };
-                    previousColumn = j;
-                }
-                previousRow = i;
-            }
-        }
-
-        public abstract class Ship
-        {
-            private int _length;
-            private Direction orientation = Direction.Vertical;
-            private Cell[]? _cells;
-            
-            public Direction Orientation => orientation;
-
-            public bool CanPlace(Cell cell)
-            {
-                var cellsBeingConsidered = cell.LinkedCells(orientation).Take(_length).ToList();
-                
-                var valid = cellsBeingConsidered.Count == _length 
-                             && cellsBeingConsidered.All(c => c.ship == null);
-                
-                cellsBeingConsidered.ForEach(c => c.SetPlacementIndicator(valid));
-                return valid;
-            }
-            
-            public bool TryPlace(Cell cell)
-            {
-                if (!CanPlace(cell)) return false;
-                
-                _cells = cell.LinkedCells(orientation).Take(_length).ToArray();
-                
-                foreach (var c in _cells)
-                {
-                    c.SetShip(this);
-                }
-                
-                return true;
-            }
-            
-            public void ToggleOrientation() => orientation = orientation == Direction.Vertical ? Direction.Horizontal : Direction.Vertical;
-            
-            public enum Direction
-            {
-                Vertical,
-                Horizontal
-            }
-            
-            public class Carrier : Ship
-            {
-                public Carrier() => _length = 5;
-            }
-            
-            public class Battleship : Ship
-            {
-                public Battleship() => _length = 4;
-            }
-            
-            public class Cruiser : Ship
-            {
-                public Cruiser() => _length = 3;
-            }
-
-            public class Submarine : Ship
-            {
-                public Submarine() => _length = 3;
-            }
-            
-            public class Destroyer : Ship
-            {
-                public Destroyer() => _length = 2;
-            }
-        }
-        
-        public class Cell
-        {
-            public (int x, int y) coords;
-            private bool considered;
-            private bool valid;
-            public Ship? ship;
-            public Cell? e, s;
-
-            public string Classes
-            {
-                get
-                {
-                    if (considered)
-                    {
-                        if (valid)
-                            return "cell-valid";
-                        return "cell-invalid";
-                    } 
-                    if (ship != null)
-                    {
-                        return "cell-ship";
-                    }
-
-                    return "";
-                }
-            }
-
-            public void SetPlacementIndicator(bool isValid)
-            {
-                considered = true;
-                valid = isValid;
-            }
-            
-            public void ClearPlacementIndicator()
-            {
-                considered = false;
-                EastCells.ToList().ForEach(c => c.considered = false);
-                SouthCells.ToList().ForEach(c => c.considered = false);
-            }
-            
-            public void SetShip(Ship ship) => this.ship = ship;
-            
-            public IEnumerable<Cell> LinkedCells(Ship.Direction direction) => direction switch 
-            {
-                Ship.Direction.Horizontal => EastCells,
-                Ship.Direction.Vertical => SouthCells,
-                _ => throw new ArgumentOutOfRangeException()    
-            };
-
-            private IEnumerable<Cell> EastCells
-            {
-                get
-                {
-                    var next = this;
-                    while (next != null)
-                    {
-                        yield return next;
-                        next = next.e;
-                    }
-                }
-            }
-            
-            private IEnumerable<Cell> SouthCells
-            {
-                get
-                {
-                    var next = this;
-                    while (next != null)
-                    {
-                        yield return next;
-                        next = next.s;
-                    }
-                }
-            }
-        }
-    }
+    // https://blog.hagoodit.com/2021/08/28/strongly-typed-signal-r-client-and-server/
+    // use the above to build a proper client
+    
 
     private void OnMouseOverMyBoard(MouseEventArgs obj, (int x, int y) coords)
     {

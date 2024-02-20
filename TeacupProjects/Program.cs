@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using TeacupProjects.Battleship.Signal;
 using TeacupProjects.Data;
-using TeacupProjects.Pages;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddSingleton<WeatherForecastService>();
+builder.Services.AddScoped<IBattleshipClient, BattleshipClient>();
 
 var app = builder.Build();
 
@@ -27,7 +28,7 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.MapBlazorHub();
-app.MapHub<Battleship.BattleshipHub>("/battleshiphub");
+app.MapHub<BattleshipHub>(BattleshipHub.Path);
 app.MapFallbackToPage("/_Host");
 
 app.Run();
