@@ -9,8 +9,8 @@ public interface IBattleshipClient : IBattleshipHubClient
     HubConnection HubConnection { get; }
     Task Start();
     
-    void OnSend(Func<string, Task> callback);
-    void OnJoin(Func<string, string, Task> callback);
-    void OnAcceptJoin(Func<string, Task> callback);
-    void OnRejectJoin(Func<string, Task> callback);
+    void OnMessageReceived(Func<string, string, string, Task> callback);
+    void OnPlayerJoined(Func<string, string, Task> callback);
+    void OnPlayerWelcomed(Func<string, string, string?, Task> callback);
+    void OnPlayerChangedName(Func<string, string, string, Task> callback);
 }

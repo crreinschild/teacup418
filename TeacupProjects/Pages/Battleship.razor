@@ -1,7 +1,9 @@
 ﻿@page "/battleship"
 @page "/battleship/{id}"
-@using TeacupProjects.Battleship
+@rendermode @(new InteractiveServerRenderMode(false))
 @using TeacupProjects.Battleship.Signal
+@using TeacupProjects.Battleship
+@using System.Runtime.InteropServices
 @inject NavigationManager NavigationManager
 @inject IBattleshipClient BattleshipClient
 <h3>Battleship</h3>
@@ -9,12 +11,34 @@
 {
     <button @onclick="StartGame">Start Game</button>
 }
+else if (!isConnected)
+{
+    <p>Loading...</p>
+}
 else
 {
     <p>Id: @id</p>
-    <p>Url: @NavigationManager.Uri</p>
+    <p>Url: <a href="@NavigationManager.Uri">@NavigationManager.Uri</a></p>
     
-    <button @onclick="Send" disabled="@(!BattleshipClient.IsConnected)">Send</button>
+    <p>
+        <label>Username</label>
+        <input type="text" @bind="@PendingName" @bind:event="oninput"/>
+        @if (nameChanged)
+        {
+            <button @onclick="ChangeName">Change Name</button>
+        }
+    </p>
+    
+    <p>
+        <label>Send Message</label>
+        <div>
+            <textarea rows="2" @bind="@PendingMessage"></textarea>
+        </div>
+        <div>
+            <button @onclick="Send" disabled="@(!BattleshipClient.IsConnected)">Send</button>
+        </div>
+    </p>
+    
     <p>Connected: @BattleshipClient.IsConnected</p>
     <ul>
         @foreach (var message in messages)
@@ -22,6 +46,8 @@ else
             <li>@message</li>
         }
     </ul>
+    
+    <button @onclick="Ready" disabled="@isReady">Ready</button>
     
     <table>
         @for (int i = 0; i < 10; i++)
@@ -49,8 +75,46 @@ else
 @code {
     [Parameter]
     public string? id { get; set; }
-    private string? connectionId = null;
-    private string? opponentConnectionId = null;
+    
+    // is connected
+    private bool isConnected;
+
+    // my unique ID
+    private string myId = Guid.NewGuid().ToString();
+    // my player name
+    private string? myName;
+
+    private string? _pendingName;
+    private string PendingName
+    {
+        get => _pendingName ?? String.Empty;
+        set
+        {
+            if (_pendingName == value)
+                return;
+            _pendingName = value;
+            nameChanged = !string.IsNullOrWhiteSpace(_pendingName) && !_pendingName.Equals(myName);
+        } 
+    }
+    private bool nameChanged = false;
+    
+    // message
+    private string? _pendingMessage;
+    private string PendingMessage
+    {
+        get => _pendingMessage ?? string.Empty;
+        set => _pendingMessage = value;
+    }
+    
+    // other players
+    private Dictionary<string, string?> otherPlayers = new();
+    
+    // ready
+    private bool isReady = false;
+    
+    // game started
+    private bool gameStarted = false;
+    
     private List<string> messages = new List<string>();
     private Board myBoard = new Board();
     private List<Ship> shipsToPlace = new List<Ship>()
@@ -68,78 +132,98 @@ else
         NavigationManager.NavigateTo($"/battleship/{Guid.NewGuid()}", true);
     }
     
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (!string.IsNullOrEmpty(id))
+            {
+                BattleshipClient.OnPlayerJoined(OnPlayerJoined);
+                BattleshipClient.OnPlayerWelcomed(OnPlayerWelcomed);
+                BattleshipClient.OnPlayerChangedName(OnPlayerChangedName);
+                BattleshipClient.OnMessageReceived(OnMessageReceived);
+
+                await BattleshipClient.Start();
+                await BattleshipClient.JoinRoom(id, myId);
+            }
+            isConnected = true;
+            StateHasChanged();
+        }
+    }
+    
     protected override async Task OnInitializedAsync()
     {
-        if (!string.IsNullOrEmpty(id))
-        {
-            BattleshipClient.OnJoin(OnJoin);
-            BattleshipClient.OnAcceptJoin(OnAcceptJoin);
-            BattleshipClient.OnRejectJoin(OnRejectJoin);
-            BattleshipClient.OnSend(OnSend);
-            
-            // get my connection id
-            await BattleshipClient.Start();
-            connectionId = BattleshipClient.ConnectionId;
-            await BattleshipClient.Join(id, connectionId);
-        }
     }
-    
-    private async Task Send() => await BattleshipClient.Send(Guid.NewGuid().ToString());
 
-    private async Task OnSend(string message)
+    private async Task ChangeName()
     {
-        messages.Add(message);
+        if (string.IsNullOrWhiteSpace(PendingName) || PendingName.Equals(myName))
+            return;
+        
+        myName = PendingName;
+        await BattleshipClient.DeclareName(id, myId, myName);
+        nameChanged = false;
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OnJoin(string pageId, string incomingConnectionId)
+    private async Task Send()
     {
-        if (pageId != id)
+        if (!string.IsNullOrWhiteSpace(PendingMessage))
         {
-            messages.Add($"Ignoring {incomingConnectionId} for {pageId}");
-        } else if (incomingConnectionId == connectionId)
-        {
-            messages.Add($"It's me! {connectionId}");
-        } else if (opponentConnectionId is null)
-        {
-            messages.Add($"Letting {incomingConnectionId} join.");
-            opponentConnectionId = incomingConnectionId;
-            await BattleshipClient.AcceptJoin(connectionId);
+            messages.Add(string.IsNullOrWhiteSpace(myName) 
+                ? $"[{myId}] {PendingMessage}"
+                : $"[{myName}] {PendingMessage}");
+            await BattleshipClient.BroadcastMessage(id, myId, PendingMessage);
+            PendingMessage = string.Empty;
         }
-        else
-        {
-            messages.Add($"Rejecting {incomingConnectionId}");
-            await BattleshipClient.RejectJoin("Game already in progress");
-        }
+    } 
+
+    private async Task OnMessageReceived(string roomId, string from, string message)
+    {
+        otherPlayers.TryGetValue(from, out var name);
+        messages.Add(
+            string.IsNullOrEmpty(name)
+            ? $"[{from}]: {message}" 
+            : $"[{name}]: {message}");
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OnAcceptJoin(string incomingConnectionId)
+    private async Task OnPlayerJoined(string roomId, string incomingId)
     {
-        if (incomingConnectionId == connectionId)
+        if (myId.Equals(incomingId))
+            return;
+        
+        if (!otherPlayers.ContainsKey(incomingId))
         {
-            messages.Add($"I'm accepting me! {connectionId}");
-        } else if (opponentConnectionId is null)
-        {
-            opponentConnectionId = incomingConnectionId;
-            messages.Add($"Joined game against: {incomingConnectionId}");
+            otherPlayers.TryAdd(incomingId, null);
+            messages.Add($"Player {incomingId} joined.");
         }
-        else
+
+        await BattleshipClient.WelcomePlayer(id, myId, myName);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnPlayerWelcomed(string roomId, string incomingId, string? incomingName)
+    {
+        if (otherPlayers.TryAdd(incomingId, incomingName))
         {
-            messages.Add($"Client ({incomingConnectionId}) accepted me, but I already have an opponent ({opponentConnectionId})");
+            messages.Add($"{incomingName ?? "Player"} [{incomingId}] welcomed you.");
         }
         await InvokeAsync(StateHasChanged);
     }
     
-    private async Task OnRejectJoin(string message)
+    private async Task OnPlayerChangedName(string roomId, string incomingId, string incomingName)
     {
-        messages.Add(message);
+        otherPlayers.TryGetValue(incomingId, out var oldName);
+        otherPlayers[incomingId] = incomingName;
+        messages.Add($"{oldName ?? "Player"} [{incomingId}] changed their name to {incomingName}");
         await InvokeAsync(StateHasChanged);
     }
 
-    // https://blog.hagoodit.com/2021/08/28/strongly-typed-signal-r-client-and-server/
-    // use the above to build a proper client
-    
+    private void Ready()
+    {
+        isReady = true;
+    }
 
     private void OnMouseOverMyBoard(MouseEventArgs obj, (int x, int y) coords)
     {

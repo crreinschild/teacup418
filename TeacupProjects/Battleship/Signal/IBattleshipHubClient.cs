@@ -2,8 +2,8 @@
 
 public interface IBattleshipHubClient
 {
-    Task Send(string message);
-    Task Join(string id, string connectionId);
-    Task AcceptJoin(string connectionId);
-    Task RejectJoin(string message);
+    Task BroadcastMessage(string roomId, string from, string message);
+    Task JoinRoom(string roomId, string id);
+    Task WelcomePlayer(string roomId, string id, string? name);
+    Task DeclareName(string roomId, string id, string name);
 }

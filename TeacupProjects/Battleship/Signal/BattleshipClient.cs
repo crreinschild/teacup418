@@ -36,43 +36,43 @@ public class BattleshipClient : IBattleshipClient, IAsyncDisposable
         }
     }
     
-    public async Task Send(string message) => await HubConnection.SendAsync(nameof(Send), message);
+    public async Task BroadcastMessage(string roomId, string myId, string message) => await HubConnection.SendAsync(nameof(BroadcastMessage), roomId, myId, message);
     
-    public async Task Join(string id, string connectionId) => await HubConnection.SendAsync(nameof(Join), id, connectionId);
+    public async Task JoinRoom(string roomId, string myId) => await HubConnection.SendAsync(nameof(JoinRoom), roomId, myId);
     
-    public async Task AcceptJoin(string connectionId) => await HubConnection.SendAsync(nameof(AcceptJoin), connectionId);
+    public async Task WelcomePlayer(string roomId, string myId, string? myName) => await HubConnection.SendAsync(nameof(WelcomePlayer), roomId, myId, myName);
 
-    public async Task RejectJoin(string message) => await HubConnection.SendAsync(nameof(RejectJoin), message);
+    public async Task DeclareName(string roomId, string myId, string myName) => await HubConnection.SendAsync(nameof(DeclareName), roomId, myId, myName);
 
-    public void OnSend(Func<string, Task> action)
+    public void OnMessageReceived(Func<string, string, string, Task> action)
     {
         if (!Started)
         {
-            HubConnection.On(nameof(Send), action);
+            HubConnection.On(nameof(BroadcastMessage), action);
         }
     }
 
-    public void OnJoin(Func<string, string, Task> action)
+    public void OnPlayerJoined(Func<string, string, Task> action)
     {
         if (!Started)
         {
-            HubConnection.On(nameof(Join), action);
+            HubConnection.On(nameof(JoinRoom), action);
         }
     }
 
-    public void OnAcceptJoin(Func<string, Task> connectionId)
+    public void OnPlayerWelcomed(Func<string, string, string?, Task> action)
     {
         if (!Started)
         {
-            HubConnection.On(nameof(AcceptJoin), connectionId);
+            HubConnection.On(nameof(WelcomePlayer), action);
         }
     }
 
-    public void OnRejectJoin(Func<string, Task> message)
+    public void OnPlayerChangedName(Func<string, string, string, Task> action)
     {
         if (!Started)
         {
-            HubConnection.On(nameof(RejectJoin), message);
+            HubConnection.On(nameof(DeclareName), action);
         }
     }
 }
