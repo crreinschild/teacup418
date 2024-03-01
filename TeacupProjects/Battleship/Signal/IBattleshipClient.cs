@@ -13,4 +13,5 @@ public interface IBattleshipClient : IBattleshipHubClient
     void OnPlayerJoined(Func<string, string, Task> callback);
     void OnPlayerWelcomed(Func<string, string, string?, Task> callback);
     void OnPlayerChangedName(Func<string, string, string, Task> callback);
+    void OnPlayerReady(Func<string, string, Task> callback);
 }

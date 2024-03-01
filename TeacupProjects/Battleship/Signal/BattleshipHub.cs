@@ -17,4 +17,5 @@ public class BattleshipHub : Hub<IBattleshipHubClient>
     } 
     public async Task WelcomePlayer(string roomId, string myId, string? myName) => await Clients.OthersInGroup(roomId).WelcomePlayer(roomId, myId, myName);
     public async Task DeclareName(string roomId, string myId, string myName) => await Clients.Group(roomId).DeclareName(roomId, myId, myName);
+    public async Task DeclareReady(string roomId, string myId) => await Clients.Group(roomId).DeclareReady(roomId, myId);
 }

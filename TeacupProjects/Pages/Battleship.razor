@@ -39,6 +39,28 @@ else
         </div>
     </p>
     
+    <table>
+        <thead>
+        <tr>
+            <th>Player</th>
+            <th>Ready</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>@(string.IsNullOrEmpty(myName) ? myId : myName)</td>
+            <td>@isReady</td>
+        </tr>
+        @foreach (var player in otherPlayers)
+        {
+            <tr>
+                <td>@(string.IsNullOrEmpty(player.Value.name) ? player.Key : player.Value.name)</td>
+                <td>@player.Value.isReady</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    
     <p>Connected: @BattleshipClient.IsConnected</p>
     <ul>
         @foreach (var message in messages)
@@ -47,8 +69,9 @@ else
         }
     </ul>
     
-    <button @onclick="Ready" disabled="@isReady">Ready</button>
+    <p role="status">@isReady</p>
     
+    <!-- my board -->
     <table>
         @for (int i = 0; i < 10; i++)
         {
@@ -67,8 +90,9 @@ else
             </tr>
         }
     </table>
-    
     <p role="status">@status</p>
+    
+    
 }
 
 
@@ -107,7 +131,7 @@ else
     }
     
     // other players
-    private Dictionary<string, string?> otherPlayers = new();
+    private Dictionary<string, Player> otherPlayers = new();
     
     // ready
     private bool isReady = false;
@@ -125,6 +149,8 @@ else
         new Ship.Submarine(),
         new Ship.Destroyer()
     };
+
+    private int countDown = 10;
     private string status = string.Empty;
     
     void StartGame()
@@ -142,6 +168,7 @@ else
                 BattleshipClient.OnPlayerWelcomed(OnPlayerWelcomed);
                 BattleshipClient.OnPlayerChangedName(OnPlayerChangedName);
                 BattleshipClient.OnMessageReceived(OnMessageReceived);
+                BattleshipClient.OnPlayerReady(OnPlayerReady);
 
                 await BattleshipClient.Start();
                 await BattleshipClient.JoinRoom(id, myId);
@@ -150,7 +177,7 @@ else
             StateHasChanged();
         }
     }
-    
+
     protected override async Task OnInitializedAsync()
     {
     }
@@ -180,11 +207,11 @@ else
 
     private async Task OnMessageReceived(string roomId, string from, string message)
     {
-        otherPlayers.TryGetValue(from, out var name);
+        otherPlayers.TryGetValue(from, out var player);
         messages.Add(
-            string.IsNullOrEmpty(name)
+            string.IsNullOrEmpty(player?.name)
             ? $"[{from}]: {message}" 
-            : $"[{name}]: {message}");
+            : $"[{player.name}]: {message}");
         await InvokeAsync(StateHasChanged);
     }
 
@@ -195,7 +222,7 @@ else
         
         if (!otherPlayers.ContainsKey(incomingId))
         {
-            otherPlayers.TryAdd(incomingId, null);
+            otherPlayers.TryAdd(incomingId, new Player { id = incomingId });
             messages.Add($"Player {incomingId} joined.");
         }
 
@@ -205,7 +232,7 @@ else
 
     private async Task OnPlayerWelcomed(string roomId, string incomingId, string? incomingName)
     {
-        if (otherPlayers.TryAdd(incomingId, incomingName))
+        if (otherPlayers.TryAdd(incomingId, new Player { name = incomingName }))
         {
             messages.Add($"{incomingName ?? "Player"} [{incomingId}] welcomed you.");
         }
@@ -214,12 +241,46 @@ else
     
     private async Task OnPlayerChangedName(string roomId, string incomingId, string incomingName)
     {
-        otherPlayers.TryGetValue(incomingId, out var oldName);
-        otherPlayers[incomingId] = incomingName;
+        otherPlayers.TryGetValue(incomingId, out var player);
+        var oldName = player?.name;
+        otherPlayers[incomingId].name = incomingName;
         messages.Add($"{oldName ?? "Player"} [{incomingId}] changed their name to {incomingName}");
         await InvokeAsync(StateHasChanged);
     }
+    
+    private async Task OnPlayerReady(string roomId, string playerId)
+    {
+        otherPlayers.TryGetValue(playerId, out var player);
+        if (player != null)
+        {
+            player.isReady = true;
+            messages.Add($"{NameOrPlayerWithId(playerId)} is ready.");
+        }
+        else if (myId.Equals(playerId))
+        {
+            messages.Add($"I am ready");
+        }
+        else
+        {
+            messages.Add($"[OnPlayerReady] No player with id {playerId}");
+            return;
+        }
 
+        if (otherPlayers.Where(p => p.Value.isReady).Count() + (isReady ? 1 : 0) > 1)
+        {
+            // start countdown
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string NameOrId(Player player) => string.IsNullOrEmpty(player.name) ? player.id : player.name;
+
+    private string NameOrPlayerWithId(string id)
+    {
+        otherPlayers.TryGetValue(id, out var player);
+        return string.IsNullOrEmpty(player?.name) ? $"Player [{id}]" : $"{player.name} [{id}]";
+    }
+    
     private void Ready()
     {
         isReady = true;
@@ -235,15 +296,29 @@ else
         }
     }
     
-    private void OnMouseOffMyBoard(MouseEventArgs obj, (int x, int y) coords)
+    private async Task OnMouseOffMyBoard(MouseEventArgs obj, (int x, int y) coords)
     {
-        if (shipsToPlace.Any())
+        if (isReady)
+            return;
+        
+        if (!shipsToPlace.Any())
         {
-            var cell = myBoard.cells[coords.x, coords.y];
-            cell.ClearPlacementIndicator();
+            await DeclareReady();
+            return;
         }
+        
+        var cell = myBoard.cells[coords.x, coords.y];
+        cell.ClearPlacementIndicator();
+        await InvokeAsync(StateHasChanged);
     }
-    
+
+    private async Task DeclareReady()
+    {
+        isReady = true;
+        await BattleshipClient.DeclareReady(id, myId);
+        await InvokeAsync(StateHasChanged);
+    }
+
     private void OnMouseDownMyBoard(MouseEventArgs obj, (int x, int y) coords)
     {
         if (shipsToPlace.Any())

@@ -44,6 +44,9 @@ public class BattleshipClient : IBattleshipClient, IAsyncDisposable
 
     public async Task DeclareName(string roomId, string myId, string myName) => await HubConnection.SendAsync(nameof(DeclareName), roomId, myId, myName);
 
+    public async Task DeclareReady(string roomId, string myId) => await HubConnection.SendAsync(nameof(DeclareReady), roomId, myId);
+
+    
     public void OnMessageReceived(Func<string, string, string, Task> action)
     {
         if (!Started)
@@ -73,6 +76,14 @@ public class BattleshipClient : IBattleshipClient, IAsyncDisposable
         if (!Started)
         {
             HubConnection.On(nameof(DeclareName), action);
+        }
+    }
+    
+    public void OnPlayerReady(Func<string, string, Task> action)
+    {
+        if (!Started)
+        {
+            HubConnection.On(nameof(DeclareReady), action);
         }
     }
 }
