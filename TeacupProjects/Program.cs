@@ -7,7 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
-builder.Services.AddRazorComponents().AddInteractiveServerComponents();//.AddInteractiveWebAssemblyComponents();
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();//.AddInteractiveWebAssemblyComponents();
 builder.Services.AddScoped<IBattleshipClient, BattleshipClient>();
 
 var app = builder.Build();
@@ -20,7 +21,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 

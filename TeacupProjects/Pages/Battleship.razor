@@ -1,10 +1,11 @@
 ﻿@page "/battleship"
 @page "/battleship/{id}"
-@*@rendermode @(new InteractiveServerRenderMode(false))*@
+@rendermode @(new InteractiveServerRenderMode())
 @using TeacupProjects.Battleship.Signal
 @using TeacupProjects.Battleship
 @inject NavigationManager NavigationManager
 @inject IBattleshipClient BattleshipClient
+
 <h3>Battleship</h3>
 @if (string.IsNullOrEmpty(id))
 {
