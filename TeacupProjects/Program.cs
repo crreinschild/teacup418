@@ -9,7 +9,6 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();//.AddInteractiveWebAssemblyComponents();
 builder.Services.AddScoped<IBattleshipClient, BattleshipClient>();
-builder.Services.AddSignalR();
 
 var app = builder.Build();
 
