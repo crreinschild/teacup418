@@ -1,9 +1,8 @@
 ﻿@page "/battleship"
 @page "/battleship/{id}"
-@rendermode @(new InteractiveServerRenderMode(false))
+@*@rendermode @(new InteractiveServerRenderMode(false))*@
 @using TeacupProjects.Battleship.Signal
 @using TeacupProjects.Battleship
-@using System.Runtime.InteropServices
 @inject NavigationManager NavigationManager
 @inject IBattleshipClient BattleshipClient
 <h3>Battleship</h3>
@@ -176,6 +175,8 @@ else
             isConnected = true;
             StateHasChanged();
         }
+
+        await base.OnAfterRenderAsync(firstRender);
     }
 
     protected override async Task OnInitializedAsync()
