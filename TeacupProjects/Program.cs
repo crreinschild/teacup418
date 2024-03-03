@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using TeacupProjects.Battleship.Signal;
 using TeacupProjects.Components;
 
@@ -12,6 +13,11 @@ builder.Services.AddScoped<IBattleshipClient, BattleshipClient>();
 
 var app = builder.Build();
 
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -20,7 +26,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 app.UseAntiforgery();
