@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using TeacupProjects.Battleship.Signal;
 using TeacupProjects.Components;
@@ -10,6 +11,12 @@ builder.Services.AddRazorComponents()
     //.AddInteractiveWebAssemblyComponents();
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IBattleshipClient, BattleshipClient>();
+builder.Services
+    .AddAntiforgery()
+    .AddDataProtection()
+    .SetApplicationName("TeacupProjects")
+    .PersistKeysToFileSystem(
+        new DirectoryInfo(@"/var/TeacupProjects/dp/"));
 
 var app = builder.Build();
 
