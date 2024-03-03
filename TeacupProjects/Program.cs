@@ -1,14 +1,13 @@
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Web;
 using TeacupProjects.Battleship.Signal;
+using TeacupProjects.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddRazorPages();
-builder.Services.AddServerSideBlazor();
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();//.AddInteractiveWebAssemblyComponents();
+    .AddInteractiveServerComponents();
+    //.AddInteractiveWebAssemblyComponents();
+builder.Services.AddSignalR();
 builder.Services.AddScoped<IBattleshipClient, BattleshipClient>();
 
 var app = builder.Build();
@@ -21,14 +20,14 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-//app.UseHttpsRedirection();
+app.UseHttpsRedirection();
 
 app.UseStaticFiles();
+app.UseAntiforgery();
 
-app.UseRouting();
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
-app.MapBlazorHub();
 app.MapHub<BattleshipHub>(BattleshipHub.Path);
-app.MapFallbackToPage("/_Host");
 
 app.Run();
