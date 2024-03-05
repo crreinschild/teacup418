@@ -176,17 +176,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (!string.IsNullOrEmpty(Id))
-        {
-            BattleshipClient.OnPlayerJoined(OnPlayerJoined);
-            BattleshipClient.OnPlayerWelcomed(OnPlayerWelcomed);
-            BattleshipClient.OnPlayerChangedName(OnPlayerChangedName);
-            BattleshipClient.OnMessageReceived(OnMessageReceived);
-            BattleshipClient.OnPlayerReady(OnPlayerReady);
-
-            await BattleshipClient.Start();
-            await BattleshipClient.JoinRoom(Id, _myId);
-        }
     }
 
     private async Task ChangeName()
