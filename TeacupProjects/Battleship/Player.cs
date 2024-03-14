@@ -1,6 +1,8 @@
+using System.Runtime.Serialization;
+
 namespace TeacupProjects.Battleship;
 
-public record Player()
+public class Player()
 {
     public string id;
     public string? name;

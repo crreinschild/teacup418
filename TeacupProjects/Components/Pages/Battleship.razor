@@ -222,15 +222,15 @@ else
             _messages.Add($"Player {incomingId} joined.");
         }
 
-        await BattleshipClient.WelcomePlayer(Id, _myId, _myName);
+        await BattleshipClient.WelcomePlayer(Id, new Player { id = _myId, name = _myName, isReady = _isReady});
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OnPlayerWelcomed(string roomId, string incomingId, string? incomingName)
+    private async Task OnPlayerWelcomed(string roomId, Player player)
     {
-        if (_otherPlayers.TryAdd(incomingId, new Player { name = incomingName }))
+        if (_otherPlayers.TryAdd(player.id, player))
         {
-            _messages.Add($"{incomingName ?? "Player"} [{incomingId}] welcomed you.");
+            _messages.Add($"{player.name ?? "Player"} [{player.id}] welcomed you.");
         }
         await InvokeAsync(StateHasChanged);
     }

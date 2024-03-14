@@ -40,7 +40,7 @@ public class BattleshipClient : IBattleshipClient, IAsyncDisposable
     
     public async Task JoinRoom(string roomId, string myId) => await HubConnection.SendAsync(nameof(JoinRoom), roomId, myId);
     
-    public async Task WelcomePlayer(string roomId, string myId, string? myName) => await HubConnection.SendAsync(nameof(WelcomePlayer), roomId, myId, myName);
+    public async Task WelcomePlayer(string roomId, Player me) => await HubConnection.SendAsync(nameof(WelcomePlayer), roomId, me);
 
     public async Task DeclareName(string roomId, string myId, string myName) => await HubConnection.SendAsync(nameof(DeclareName), roomId, myId, myName);
 
@@ -63,7 +63,7 @@ public class BattleshipClient : IBattleshipClient, IAsyncDisposable
         }
     }
 
-    public void OnPlayerWelcomed(Func<string, string, string?, Task> action)
+    public void OnPlayerWelcomed(Func<string, Player, Task> action)
     {
         if (!Started)
         {
